@@ -1,1 +1,3 @@
 # Memory-Networks
+Reimplementation of Memory Networks (Weston, Jason, Chopra, Sumit, and Bordes, Antoine. 2015. Memory Networks. In ICLR 2015. https://arxiv.org/pdf/1410.3916.pdf) in Julia using Knet as a term project in Machine Learning class.
+Memory Networks are a new class of learning model in machine learning. It has hidden states and weights. The aim is to make machine learn the meaning and inference of sentences by training it with fully supervised learning. After the training, the machine starts to infer some meaning from a given story and is able to answer questions about that particular story. The machine memory can be read and written.
