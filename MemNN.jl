@@ -39,7 +39,7 @@ function main(args = ARGS)
 end
 
 function createDict(training_data)
-  dict = Dict{String, Int}
+  dict = Dict{String, Any}
   number = 1
   open(training_data) do f
     while !eof(f)
@@ -54,11 +54,11 @@ function parseLineAddDict(number, line, dict)
   words = split(line)
   for str in words
     if !haskey(dict, str)
-      dict[str] = number
-      number += 1
+      dict[str] = [number, (number + 1), (number + 2)]
+      number = number + 3
     end
   end
-  return (number, dict)
+  return number, dict
 end
 
 function initWeights(atype, feature_space, embedding_dimension, winit)
