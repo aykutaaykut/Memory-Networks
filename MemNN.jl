@@ -20,15 +20,21 @@ function main(args = ARGS)
   margin = 0.1
   total_epochs = 10
 
+  #User settings are added.
   settings = parse_commandline()
   println("settings", [(symbol, value) for (symbol, value) in settings]...)
   settings[:seed] > 0 && srand(opts[:seed])
   settings[:atype] = eval(parse(settings[:atype]))
-  #Classification of datafiles as training, dev and test
+
+  #Classification of datafiles as training, dev and test.
   training_data = settings[:datafiles][1]
   dev_data = settings[:datafiles][2]
   test_data = settings[:datafiles][3:end]
 
+  #Memory of the model.
+  memory = Any[]
+
+  #Creating the dictionary of words in the data.
   dict = createDict(training_data)
   dict_length = length(dict)
   info("$dict_length unique words.")
@@ -75,15 +81,20 @@ function initWeights(atype, feature_space, embedding_dimension, winit)
   return weights
 end
 
-function phi(x)
+function updateMemory(x, memory)
+  push!(memory, x)
+  return memory
+end
+
+function phi(x, d)
 
 end
 
 function s(x, y, u)
   score = 0
-  phiy = phi(y)
+  phiy = phi(y, d)
   for input in x
-    phix = phi(input)
+    phix = phi(input, d)
     current_score = phix' * u' * u * phiy
     score = score + current_score
   end
