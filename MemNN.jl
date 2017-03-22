@@ -23,13 +23,17 @@ function main(args = ARGS)
   #User settings are added.
   settings = parse_commandline()
   println("settings", [(symbol, value) for (symbol, value) in settings]...)
-  settings[:seed] > 0 && srand(opts[:seed])
+  settings[:seed] > 0 && srand(settings[:seed])
   settings[:atype] = eval(parse(settings[:atype]))
 
   #Classification of datafiles as training, dev and test.
   training_data = settings[:datafiles][1]
-  dev_data = settings[:datafiles][2]
-  test_data = settings[:datafiles][3:end]
+  if length(settings[:datafiles]) > 1
+    dev_data = settings[:datafiles][2]
+  end
+  if length(settings[:datafiles]) > 2
+    test_data = settings[:datafiles][3:end]
+  end
 
   #Memory of the model.
   memory = Any[]
@@ -42,24 +46,31 @@ function main(args = ARGS)
 
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
-
+  for epoch = 1:total_epochs
+    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space, dict, learning_rate, margin)
+    model[:uo] = uo
+    model[:ur] = ur
+    copy!(memory, updated_memory)
+    println((:epoch, epoch, :loss, avg_loss...))
+  end
 end
 
 function createDict(training_data)
-  dict = Dict{String, Any}
+  dict = Dict{String, Any}()
   number = 1
-  open(training_data) do f
-    while !eof(f)
-      str = readline(f)
-      number, dict = parseLineAddDict(number, str, dict)
-    end
+  f = open(training_data)
+  while !eof(f)
+    str = readline(f)
+    number, dict = parseLineAddDict(number, str, dict)
   end
+  close(f)
   return dict
 end
 
 function parseLineAddDict(number, line, dict)
   words = split(line)
-  for str in words
+  for i = 1:length(words)
+    str = words[i]
     if !haskey(dict, str)
       dict[str] = [number, (number + 1), (number + 2)]
       number = number + 3
@@ -69,7 +80,7 @@ function parseLineAddDict(number, line, dict)
 end
 
 function initWeights(atype, feature_space, embedding_dimension, winit)
-  weights = Dict()
+  weights = Dict{Symbol, Any}()
 
   uo = winit * randn(embedding_dimension, feature_space)
   ur = winit * randn(embedding_dimension, feature_space)
@@ -92,25 +103,25 @@ function G(x, memory)
   return memory
 end
 
-function O(x, memory, uo, dict)
-  scorelist1 = so(x, uo, memory, dict)
+function O(x, memory, uo, d, dict)
+  scorelist1 = so(x, uo, d, memory, dict)
   o1 = indmax(scorelist1)
   mo1 = memory[o1]
   input2 = [x, mo1]
-  scorelist2 = so(input2, uo, memory, dict)
+  scorelist2 = so(input2, uo, d, memory, dict)
   o2 = indmax(scorelist2)
   mo2 = memory[o2]
   return [x, mo1, mo2]
 end
 
-function R(input, dict, ur)
+function R(input, dict, ur, d)
   reverseDict = Array(String, length(dict))
   for (key, value) in dict
     index = div(value[1], 3) + 1
     reverseDict[index] = key
   end
 
-  scorelist = sr(input, ur, dict)
+  scorelist = sr(input, ur, d, dict)
   answer = indmax(scorelist)
   return reverseDict[answer]
 end
@@ -126,6 +137,7 @@ function inputToValues(x, dict, mode)
     value = dict[word][mode]
     values[i] = value
   end
+  return values
 end
 
 function phi(x, d, dict, mode)
@@ -146,7 +158,7 @@ function phi(x, d, dict, mode)
   return feature
 end
 
-function s(x, y, u, dict)
+function s(x, y, u, d, dict)
   score = 0
   phiy = phi(y, d, dict, 3)
   for i = 1:length(x)
@@ -162,31 +174,31 @@ function s(x, y, u, dict)
   return score
 end
 
-function so(x, uo, memory, dict)
+function so(x, uo, d, memory, dict)
   scorelist = Any[]
   for i = 1:length(memory)
-    score = s(x, memory[i] , uo, dict)
+    score = s(x, memory[i] , uo, d, dict)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function sr(x, ur, dict)
+function sr(x, ur, d, dict)
   scorelist = Any[]
   for k in keys(dict)
-    score = s(x, k, ur, dict)
+    score = s(x, k, ur, d, dict)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function answer(x, memory, uo, ur, dict)
-  output = O(x, memory, uo, dict)
-  answer = R(output, dict, ur)
+function answer(x, memory, uo, ur, d, dict)
+  output = O(x, memory, uo, d, dict)
+  answer = R(output, dict, ur, d)
   return answer
 end
 
-function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
+function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
   total_loss = 0
   m1_loss = 0
   m2_loss = 0
@@ -198,7 +210,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
 
   for i = 1:length(memory)
     if memory[i] != correct_m1
-      m1l = max(0, margin - s(x, correct_m1, uo, dict) + s(x, memory[i], uo, dict))
+      m1l = max(0, margin - s(x, correct_m1, uo, d, dict) + s(x, memory[i], uo, d, dict))
       m1_loss = m1_loss + m1l
     end
   end
@@ -206,7 +218,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
   for j = 1:length(memory)
     if memory[j] != correct_m2
       input = [x, correct_m1]
-      m2l = max(0, margin - s(input, correct_m2, uo, dict) + s(input, memory[j], uo, dict))
+      m2l = max(0, margin - s(input, correct_m2, uo, d, dict) + s(input, memory[j], uo, d, dict))
       m2_loss = ms_loss + m2l
     end
   end
@@ -214,7 +226,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
   for k in keys(dict)
     if k != correct_r
       input = [x, correct_m1, correct_m2]
-      rl = max(0, margin - s(input, correct_r, ur, dict) + s(input, k, ur, dict))
+      rl = max(0, margin - s(input, correct_r, ur, d, dict) + s(input, k, ur, d, dict))
       r_loss = r_loss + rl
     end
   end
@@ -225,45 +237,47 @@ end
 
 marginRankingLossGradient = grad(marginRankingLoss)
 
-function train(data_file, uo, ur, memory, dict, lr, margin)
+function train(data_file, uo, ur, memory, d, dict, lr, margin)
   total_loss = 0
   numq = 0
-  open(training_data) do f
-    while !eof(f)
-      str = readline(f)
-      if !contains(str, '?')
-        memory = G(str, memory)
-      else
-        words = split(str)
-        line_number = words[1]
-        question = words[2]
-        for i = 3:(length(words) - 3)
-          question = question * " " * words[i]
-        end
-        memory = G(question, memory)
-
-        correct_r = words[length(words) - 2]
-
-        correct_m1_index = words[length(words) - 1]
-        correct_m1_index = parse(Int, correct_m1_index)
-        correct_m1 = memory[length(memory) - (length(memory) - correct_m1_index)]
-
-        correct_m2_index = words[length(words)]
-        correct_m2_index = parse(Int, correct_m2_index)
-        correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
-
-        gold_labels = [correct_m1, correct_m2, correct_r]
-        loss = marginRankingLoss(uo, ur, memory, question, gold_labels, dict, margin)
-        lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, dict, margin)
-
-        uo = copy!(uo, uo - lr * lossGradient[1])
-        ur = copy!(ur, ur - lr * lossGradient[2])
-
-        total_loss = total_loss + loss
-        numq = numq + 1
+  f = open(data_file)
+  while !eof(f)
+    str = readline(f)
+    words = split(str)
+    if words[end][end] == '.'
+      memory = G(str, memory)
+    else
+      line_number = words[1]
+      question = words[2]
+      for i = 3:(length(words) - 3)
+        question = question * " " * words[i]
       end
+      memory = G(question, memory)
+
+      correct_r = words[length(words) - 2]
+
+      correct_m1_index = words[length(words) - 1]
+      correct_m1_index = parse(Int, correct_m1_index)
+      correct_m1 = memory[length(memory) - (length(memory) - correct_m1_index)]
+
+      correct_m2_index = words[length(words)]
+      correct_m2_index = parse(Int, correct_m2_index)
+      correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
+
+      gold_labels = [correct_m1, correct_m2, correct_r]
+      loss = marginRankingLoss(uo, ur, memory, question, gold_labels, d, dict, margin)
+      lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, d, dict, margin)
+
+      uo = copy!(uo, uo - lr * lossGradient[1])
+      ur = copy!(ur, ur - lr * lossGradient[2])
+
+      total_loss = total_loss + loss
+      numq = numq + 1
     end
   end
+  close(f)
   avg_loss = total_loss / numq
-  return uo, ur, memory
+  return uo, ur, memory, avg_loss
 end
+
+main()
