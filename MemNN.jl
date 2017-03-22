@@ -91,6 +91,17 @@ function G(x, memory)
   return memory
 end
 
+function O(x, memory, uo)
+  scorelist1 = so(x, uo, memory)
+  o1 = indmax(scorelist1)
+  mo1 = memory[o1]
+  input2 = [x, mo1]
+  scorelist2 = so(input2, uo, memory)
+  o2 = indmax(scorelist2)
+  mo2 = memory[o2]
+  return [x, mo1, mo2]
+end
+
 function phi(x, d)
 
 end
