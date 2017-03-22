@@ -89,3 +89,21 @@ function s(x, y, u)
   end
   return score
 end
+
+function so(x, uo, memory)
+  scorelist = Any[]
+  for i = 1:length(memory)
+    score = s(x, memory[i] , uo)
+    push!(scorelist, score)
+  end
+  return scorelist
+end
+
+function sr(x, ur, dict)
+  scorelist = Any[]
+  for k in keys(dict)
+    score = s(x, dict[k], ur)
+    push!(scorelist, score)
+  end
+  return scorelist
+end
