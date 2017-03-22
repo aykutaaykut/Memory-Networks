@@ -46,7 +46,8 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
-    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space, dict, learning_rate, margin)
+    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory,
+                                                   feature_space, dict, learning_rate, margin, settings[:atype])
     model[:uo] = uo
     model[:ur] = ur
     copy!(memory, updated_memory)
@@ -102,25 +103,25 @@ function G(x, memory)
   return memory
 end
 
-function O(x, memory, uo, d, dict)
-  scorelist1 = so(x, uo, d, memory, dict)
+function O(x, memory, uo, d, dict, atype)
+  scorelist1 = so(x, uo, d, memory, dict, atype)
   o1 = indmax(scorelist1)
   mo1 = memory[o1]
   input2 = [x, mo1]
-  scorelist2 = so(input2, uo, d, memory, dict)
+  scorelist2 = so(input2, uo, d, memory, dict, atype)
   o2 = indmax(scorelist2)
   mo2 = memory[o2]
   return [x, mo1, mo2]
 end
 
-function R(input, dict, ur, d)
+function R(input, dict, ur, d, atype)
   reverseDict = Array(String, length(dict))
   for (key, value) in dict
     index = div(value[1], 3) + 1
     reverseDict[index] = key
   end
 
-  scorelist = sr(input, ur, d, dict)
+  scorelist = sr(input, ur, d, dict, atype)
   answer = indmax(scorelist)
   return reverseDict[answer]
 end
@@ -139,7 +140,7 @@ function inputToValues(x, dict, mode)
   return values
 end
 
-function phi(x, d, dict, mode)
+function phi(atype, x, d, dict, mode)
   values = inputToValues(x, dict, mode)
   sum = 0
   k = length(values) - 1
@@ -147,30 +148,31 @@ function phi(x, d, dict, mode)
     sum = sum + values[i] * (10 ^ k)
     k = k - 1
   end
-  feature = Array(Int, d)
+  feature = Array(Float32, d)
   binary = bin(sum, d)
   for c = 1:length(binary)
     if binary[c] == '1'
       feature[c] == 1
     end
   end
+  feature = convert(atype, feature)
   return feature
 end
 
-function s(x, y, u, d, dict)
+function s(x, y, u, d, dict, atype)
   score = 0
-  phiy = phi(y, d, dict, 3)
+  phiy = phi(atype, y, d, dict, 3)
   if typeof(x) == String
-    phix = phi(x, d, dict, 1)
+    phix = phi(atype, x, d, dict, 1)
     current_score = phix' * u' * u * phiy
     score = score + current_score
   else
     for i = 1:length(x)
       input = x[i]
       if i == 1
-        phix = phi(input, d, dict, 1)
+        phix = phi(atype, input, d, dict, 1)
       else
-        phix = phi(input, d, dict, 2)
+        phix = phi(atype, input, d, dict, 2)
       end
       current_score = phix' * u' * u * phiy
       score = score + current_score
@@ -180,31 +182,31 @@ function s(x, y, u, d, dict)
   return score
 end
 
-function so(x, uo, d, memory, dict)
+function so(x, uo, d, memory, dict, atype)
   scorelist = Any[]
   for i = 1:length(memory)
-    score = s(x, memory[i] , uo, d, dict)
+    score = s(x, memory[i] , uo, d, dict, atype)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function sr(x, ur, d, dict)
+function sr(x, ur, d, dict, atype)
   scorelist = Any[]
   for k in keys(dict)
-    score = s(x, k, ur, d, dict)
+    score = s(x, k, ur, d, dict, atype)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function answer(x, memory, uo, ur, d, dict)
-  output = O(x, memory, uo, d, dict)
-  answer = R(output, dict, ur, d)
+function answer(x, memory, uo, ur, d, dict, atype)
+  output = O(x, memory, uo, d, dict, atype)
+  answer = R(output, dict, ur, d, atype)
   return answer
 end
 
-function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
+function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin, atype)
   total_loss = 0
   m1_loss = 0
   m2_loss = 0
@@ -216,7 +218,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
 
   for i = 1:length(memory)
     if memory[i] != correct_m1
-      m1l = max(0, margin - s(x, correct_m1, uo, d, dict) + s(x, memory[i], uo, d, dict))
+      m1l = max(0, margin - s(x, correct_m1, uo, d, dict, atype) + s(x, memory[i], uo, d, dict, atype))
       m1_loss = m1_loss + m1l
     end
   end
@@ -224,7 +226,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
   for j = 1:length(memory)
     if memory[j] != correct_m2
       input = [x, correct_m1]
-      m2l = max(0, margin - s(input, correct_m2, uo, d, dict) + s(input, memory[j], uo, d, dict))
+      m2l = max(0, margin - s(input, correct_m2, uo, d, dict, atype) + s(input, memory[j], uo, d, dict, atype))
       m2_loss = m2_loss + m2l
     end
   end
@@ -232,18 +234,18 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
   for k in keys(dict)
     if k != correct_r
       input = [x, correct_m1, correct_m2]
-      rl = max(0, margin - s(input, correct_r, ur, d, dict) + s(input, k, ur, d, dict))
+      rl = max(0, margin - s(input, correct_r, ur, d, dict, atype) + s(input, k, ur, d, dict, atype))
       r_loss = r_loss + rl
     end
   end
 
-  total_loss = m1_loss + m2_loss + r_loss
+  total_loss = (m1_loss + m2_loss + r_loss)
   return total_loss
 end
 
 marginRankingLossGradient = grad(marginRankingLoss)
 
-function train(data_file, uo, ur, memory, d, dict, lr, margin)
+function train(data_file, uo, ur, memory, d, dict, lr, margin, atype)
   total_loss = 0
   numq = 0
   f = open(data_file)
@@ -271,8 +273,8 @@ function train(data_file, uo, ur, memory, d, dict, lr, margin)
       correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
 
       gold_labels = [correct_m1, correct_m2, correct_r]
-      loss = marginRankingLoss(uo, ur, memory, question, gold_labels, d, dict, margin)
-      lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, d, dict, margin)
+      loss = marginRankingLoss(uo, ur, memory, question, gold_labels, d, dict, margin, atype)
+      lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, d, dict, margin, atype)
 
       uo = copy!(uo, uo - lr * lossGradient[1])
       ur = copy!(ur, ur - lr * lossGradient[2])
