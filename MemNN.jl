@@ -5,7 +5,6 @@ function parse_commandline()
   @add_arg_table s begin
     ("--datafiles"; nargs = '+'; help = "If provided, use first file for training, second for dev, others for test.")
     ("--input"; arg_type = Char; default = 's'; help = "s for sentence sequences, w for word sequences as input")
-    ("--batchsize"; arg_type=Int; default=90; help="Number of sequences to train on in parallel.")
     ("--winit"; arg_type=Float64; default=0.1; help="Initial weights set to winit*randn().")
     ("--seed"; arg_type=Int; default=38; help="Random number seed.")
     ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float32}" : "Array{Float32}"); help = "Array type: Array for CPU, KnetArray for GPU")
@@ -161,16 +160,23 @@ end
 function s(x, y, u, d, dict)
   score = 0
   phiy = phi(y, d, dict, 3)
-  for i = 1:length(x)
-    input = x[i]
-    if i == 1
-      phix = phi(input, d, dict, 1)
-    else
-      phix = phi(input, d, dict, 2)
-    end
+  if typeof(x) == String
+    phix = phi(x, d, dict, 1)
     current_score = phix' * u' * u * phiy
     score = score + current_score
+  else
+    for i = 1:length(x)
+      input = x[i]
+      if i == 1
+        phix = phi(input, d, dict, 1)
+      else
+        phix = phi(input, d, dict, 2)
+      end
+      current_score = phix' * u' * u * phiy
+      score = score + current_score
+    end
   end
+
   return score
 end
 
@@ -219,7 +225,7 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin)
     if memory[j] != correct_m2
       input = [x, correct_m1]
       m2l = max(0, margin - s(input, correct_m2, uo, d, dict) + s(input, memory[j], uo, d, dict))
-      m2_loss = ms_loss + m2l
+      m2_loss = m2_loss + m2l
     end
   end
 
