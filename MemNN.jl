@@ -91,36 +91,80 @@ function G(x, memory)
   return memory
 end
 
-function O(x, memory, uo)
-  scorelist1 = so(x, uo, memory)
+function O(x, memory, uo, dict)
+  scorelist1 = so(x, uo, memory, dict)
   o1 = indmax(scorelist1)
   mo1 = memory[o1]
   input2 = [x, mo1]
-  scorelist2 = so(input2, uo, memory)
+  scorelist2 = so(input2, uo, memory, dict)
   o2 = indmax(scorelist2)
   mo2 = memory[o2]
   return [x, mo1, mo2]
 end
 
-function phi(x, d)
+function R(input, dict, ur)
+  reverseDict = Array(String, length(dict))
+  for (key, value) in dict
+    index = div(value[1], 3) + 1
+    reverseDict[index] = key
+  end
 
+  scorelist = sr(input, ur, dict)
+  answer = indmax(scorelist)
+  return reverseDict[answer]
 end
 
-function s(x, y, u)
+#mode = 1 for phix and x comes from the input
+#mode = 2 for phix and x comes from a supporting memory
+#mode = 3 for phiy
+function inputToValues(x, dict, mode)
+  words = split(x)
+  values = Array(Int, length(words))
+  for i = 1:length(words)
+    word = words[i]
+    value = dict[word][mode]
+    values[i] = value
+  end
+end
+
+function phi(x, d, dict, mode)
+  values = inputToValues(x, dict, mode)
+  sum = 0
+  k = length(values) - 1
+  for i = 1:length(values)
+    sum = sum + values[i] * (10 ^ k)
+    k = k - 1
+  end
+  feature = Array(Int, d)
+  binary = bin(sum, d)
+  for c = 1:length(binary)
+    if binary[c] == '1'
+      feature[c] == 1
+    end
+  end
+  return feature
+end
+
+function s(x, y, u, dict)
   score = 0
-  phiy = phi(y, d)
-  for input in x
-    phix = phi(input, d)
+  phiy = phi(y, d, dict, 3)
+  for i = 1:length(x)
+    input = x[i]
+    if i == 1
+      phix = phi(input, d, dict, 1)
+    else
+      phix = phi(input, d, dict, 2)
+    end
     current_score = phix' * u' * u * phiy
     score = score + current_score
   end
   return score
 end
 
-function so(x, uo, memory)
+function so(x, uo, memory, dict)
   scorelist = Any[]
   for i = 1:length(memory)
-    score = s(x, memory[i] , uo)
+    score = s(x, memory[i] , uo, dict)
     push!(scorelist, score)
   end
   return scorelist
@@ -129,7 +173,7 @@ end
 function sr(x, ur, dict)
   scorelist = Any[]
   for k in keys(dict)
-    score = s(x, dict[k], ur)
+    score = s(x, k, ur, dict)
     push!(scorelist, score)
   end
   return scorelist
