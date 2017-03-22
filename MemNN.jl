@@ -178,3 +178,9 @@ function sr(x, ur, dict)
   end
   return scorelist
 end
+
+function answer(x, memory, uo, ur, dict)
+  output = O(x, memory, uo, dict)
+  answer = R(output, dict, ur)
+  return answer
+end
