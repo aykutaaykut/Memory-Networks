@@ -81,8 +81,13 @@ function initWeights(atype, feature_space, embedding_dimension, winit)
   return weights
 end
 
-function updateMemory(x, memory)
-  push!(memory, x)
+function I(x)
+  return x
+end
+
+function G(x, memory)
+  feature_rep = I(x)
+  push!(memory, feature_rep)
   return memory
 end
 
