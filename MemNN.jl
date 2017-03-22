@@ -42,6 +42,7 @@ function main(args = ARGS)
 
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
+
 end
 
 function createDict(training_data)
@@ -223,3 +224,46 @@ function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
 end
 
 marginRankingLossGradient = grad(marginRankingLoss)
+
+function train(data_file, uo, ur, memory, dict, lr, margin)
+  total_loss = 0
+  numq = 0
+  open(training_data) do f
+    while !eof(f)
+      str = readline(f)
+      if !contains(str, '?')
+        memory = G(str, memory)
+      else
+        words = split(str)
+        line_number = words[1]
+        question = words[2]
+        for i = 3:(length(words) - 3)
+          question = question * " " * words[i]
+        end
+        memory = G(question, memory)
+
+        correct_r = words[length(words) - 2]
+
+        correct_m1_index = words[length(words) - 1]
+        correct_m1_index = parse(Int, correct_m1_index)
+        correct_m1 = memory[length(memory) - (length(memory) - correct_m1_index)]
+
+        correct_m2_index = words[length(words)]
+        correct_m2_index = parse(Int, correct_m2_index)
+        correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
+
+        gold_labels = [correct_m1, correct_m2, correct_r]
+        loss = marginRankingLoss(uo, ur, memory, question, gold_labels, dict, margin)
+        lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, dict, margin)
+
+        uo = copy!(uo, uo - lr * lossGradient[1])
+        ur = copy!(ur, ur - lr * lossGradient[2])
+
+        total_loss = total_loss + loss
+        numq = numq + 1
+      end
+    end
+  end
+  avg_loss = total_loss / numq
+  return uo, ur, memory
+end
