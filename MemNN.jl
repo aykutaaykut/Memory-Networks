@@ -184,3 +184,42 @@ function answer(x, memory, uo, ur, dict)
   answer = R(output, dict, ur)
   return answer
 end
+
+function marginRankingLoss(uo, ur, memory, x, gold_labels, dict, margin)
+  total_loss = 0
+  m1_loss = 0
+  m2_loss = 0
+  r_loss = 0
+
+  correct_m1 = gold_labels[1]
+  correct_m2 = gold_labels[2]
+  correct_r = gold_labels[3]
+
+  for i = 1:length(memory)
+    if memory[i] != correct_m1
+      m1l = max(0, margin - s(x, correct_m1, uo, dict) + s(x, memory[i], uo, dict))
+      m1_loss = m1_loss + m1l
+    end
+  end
+
+  for j = 1:length(memory)
+    if memory[j] != correct_m2
+      input = [x, correct_m1]
+      m2l = max(0, margin - s(input, correct_m2, uo, dict) + s(input, memory[j], uo, dict))
+      m2_loss = ms_loss + m2l
+    end
+  end
+
+  for k in keys(dict)
+    if k != correct_r
+      input = [x, correct_m1, correct_m2]
+      rl = max(0, margin - s(input, correct_r, ur, dict) + s(input, k, ur, dict))
+      r_loss = r_loss + rl
+    end
+  end
+
+  total_loss = m1_loss + m2_loss + r_loss
+  return total_loss
+end
+
+marginRankingLossGradient = grad(marginRankingLoss)
