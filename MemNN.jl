@@ -165,6 +165,7 @@ function s(x, y, u, d, dict, atype)
   if typeof(x) == String
     phix = phi(atype, x, d, dict, 1)
     current_score = phix' * u' * u * phiy
+    current_score = sum(current_score)
     score = score + current_score
   else
     for i = 1:length(x)
@@ -175,6 +176,7 @@ function s(x, y, u, d, dict, atype)
         phix = phi(atype, input, d, dict, 2)
       end
       current_score = phix' * u' * u * phiy
+      current_score = sum(current_score)
       score = score + current_score
     end
   end
