@@ -51,7 +51,7 @@ function main(args = ARGS)
     model[:uo] = uo
     model[:ur] = ur
     copy!(memory, updated_memory)
-    println((:epoch, epoch, :loss, avg_loss...))
+    println("(epoch: $epoch, loss: $avg_loss)")
   end
 end
 
@@ -208,7 +208,9 @@ function answer(x, memory, uo, ur, d, dict, atype)
   return answer
 end
 
-function marginRankingLoss(uo, ur, memory, x, gold_labels, d, dict, margin, atype)
+function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
+  uo = comb[1]
+  ur = comb[2]
   total_loss = 0
   m1_loss = 0
   m2_loss = 0
@@ -275,8 +277,11 @@ function train(data_file, uo, ur, memory, d, dict, lr, margin, atype)
       correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
 
       gold_labels = [correct_m1, correct_m2, correct_r]
-      loss = marginRankingLoss(uo, ur, memory, question, gold_labels, d, dict, margin, atype)
-      lossGradient = marginRankingLossGradient(uo, ur, memory, question, gold_labels, d, dict, margin, atype)
+      comb = []
+      push!(comb, uo)
+      push!(comb, ur)
+      loss = marginRankingLoss(comb, memory, question, gold_labels, d, dict, margin, atype)
+      lossGradient = marginRankingLossGradient(comb, memory, question, gold_labels, d, dict, margin, atype)
 
       uo = copy!(uo, uo - lr * lossGradient[1])
       ur = copy!(ur, ur - lr * lossGradient[2])
