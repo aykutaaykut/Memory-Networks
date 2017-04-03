@@ -34,9 +34,6 @@ function main(args = ARGS)
     test_data = settings[:datafiles][3:end]
   end
 
-  #Memory of the model.
-  memory = Any[]
-
   #Creating the dictionary of words in the data.
   dict = createDict(training_data)
   dict_length = length(dict)
@@ -46,6 +43,8 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
+    #Memory of the model.
+    memory = Any[]
     @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory,
                                                    feature_space, dict, learning_rate, margin, settings[:atype])
     model[:uo] = uo
@@ -186,7 +185,6 @@ function s(x, y, u, d, dict, atype)
       score = score + current_score
     end
   end
-
   return score
 end
 
@@ -233,18 +231,18 @@ function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
     end
   end
 
+  input_m = [x, correct_m1]
   for j = 1:length(memory)
     if memory[j] != correct_m2
-      input = [x, correct_m1]
-      m2l = max(0, margin - s(input, correct_m2, uo, d, dict, atype) + s(input, memory[j], uo, d, dict, atype))
+      m2l = max(0, margin - s(input_m, correct_m2, uo, d, dict, atype) + s(input_m, memory[j], uo, d, dict, atype))
       m2_loss = m2_loss + m2l
     end
   end
 
+  input_r = [x, correct_m1, correct_m2]
   for k in keys(dict)
     if k != correct_r
-      input = [x, correct_m1, correct_m2]
-      rl = max(0, margin - s(input, correct_r, ur, d, dict, atype) + s(input, k, ur, d, dict, atype))
+      rl = max(0, margin - s(input_r, correct_r, ur, d, dict, atype) + s(input_r, k, ur, d, dict, atype))
       r_loss = r_loss + rl
     end
   end
