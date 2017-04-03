@@ -71,6 +71,9 @@ function parseLineAddDict(number, line, dict)
   words = split(line)
   for i = 1:length(words)
     str = words[i]
+    if str[end] == '?' || str[end] == '.'
+      str = str[1:end - 1]
+    end
     if !haskey(dict, str)
       dict[str] = [number, (number + 1), (number + 2)]
       number = number + 3
@@ -134,6 +137,9 @@ function inputToValues(x, dict, mode)
   values = Array(Int, length(words))
   for i = 1:length(words)
     word = words[i]
+    if word[end] == '?' || word[end] == '.'
+      word = word[1:end - 1]
+    end
     value = dict[word][mode]
     values[i] = value
   end
