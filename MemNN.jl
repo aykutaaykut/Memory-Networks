@@ -41,12 +41,13 @@ function main(args = ARGS)
   feature_space = 3 * dict_length
 
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
+  mappingMatrix = settings[:winit] * randn(feature_space, feature_space)
 
   for epoch = 1:total_epochs
     #Memory of the model.
     memory = Any[]
-    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory,
-                                                   feature_space, dict, learning_rate, margin, settings[:atype])
+    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space,
+                                                   dict, mappingMatrix, learning_rate, margin, settings[:atype])
     model[:uo] = uo
     model[:ur] = ur
     copy!(memory, updated_memory)
@@ -55,7 +56,7 @@ function main(args = ARGS)
 end
 
 function createDict(training_data)
-  dict = Dict{String, Any}()
+  dict = Dict{String, Int}()
   number = 1
   f = open(training_data)
   while !eof(f)
@@ -74,8 +75,8 @@ function parseLineAddDict(number, line, dict)
       str = str[1:end - 1]
     end
     if !haskey(dict, str)
-      dict[str] = [number, (number + 1), (number + 2)]
-      number = number + 3
+      dict[str] = number
+      number = number + 1
     end
   end
   return number, dict
@@ -105,25 +106,24 @@ function G(x, memory)
   return memory
 end
 
-function O(x, memory, uo, d, dict, atype)
-  scorelist1 = so(x, uo, d, memory, dict, atype)
+function O(x, memory, uo, d, dict, mappingMatrix, atype)
+  scorelist1 = so(x, uo, d, memory, dict, mappingMatrix, atype)
   o1 = indmax(scorelist1)
   mo1 = memory[o1]
   input2 = [x, mo1]
-  scorelist2 = so(input2, uo, d, memory, dict, atype)
+  scorelist2 = so(input2, uo, d, memory, dict, mappingMatrix, atype)
   o2 = indmax(scorelist2)
   mo2 = memory[o2]
   return [x, mo1, mo2]
 end
 
-function R(input, dict, ur, d, atype)
+function R(input, dict, mappingMatrix, ur, d, atype)
   reverseDict = Array(String, length(dict))
   for (key, value) in dict
-    index = div(value[1], 3) + 1
-    reverseDict[index] = key
+    reverseDict[value] = key
   end
 
-  scorelist = sr(input, ur, d, dict, atype)
+  scorelist = sr(input, ur, d, dict, mappingMatrix, atype)
   answer = indmax(scorelist)
   return reverseDict[answer]
 end
@@ -131,44 +131,61 @@ end
 #mode = 1 for phix and x comes from the input
 #mode = 2 for phix and x comes from a supporting memory
 #mode = 3 for phiy
-function inputToValues(x, dict, mode)
+function onehot(x, dict, d, mode)
   words = split(x)
-  values = Array(Int, length(words))
-  for i = 1:length(words)
-    word = words[i]
-    if word[end] == '?' || word[end] == '.'
-      word = word[1:end - 1]
+  onehots = zeros(d, length(words))
+  if mode == 1
+    for i = 1:length(words)
+      word = words[i]
+      if word[end] == '?' || word[end] == '.'
+        word = word[1:end - 1]
+      end
+      value = dict[word]
+      onehots[value, i] = 1
     end
-    value = dict[word][mode]
-    values[i] = value
+  else
+    if mode == 2
+      for i = 1:length(words)
+        word = words[i]
+        if word[end] == '?' || word[end] == '.'
+          word = word[1:end - 1]
+        end
+        value = dict[word]
+        onehots[length(dict) + value, i] = 1
+      end
+    else
+      for i = 1:length(words)
+        word = words[i]
+        if word[end] == '?' || word[end] == '.'
+          word = word[1:end - 1]
+        end
+        value = dict[word]
+        onehots[(2 *length(dict)) + value, i] = 1
+      end
+    end
   end
-  return values
+  return onehots
 end
 
-function phi(atype, x, d, dict, mode)
-  values = inputToValues(x, dict, mode)
-  sum = 0
-  k = length(values) - 1
-  for i = 1:length(values)
-    sum = sum + values[i] * (10 ^ k)
-    k = k - 1
+#mode = 1 for phix and x comes from the input
+#mode = 2 for phix and x comes from a supporting memory
+#mode = 3 for phiy
+function phi(atype, x, d, dict, mappingMatrix, mode)
+  onehots = onehot(x, dict, d, mode)
+  mapped = zeros(d, 1)
+  for i = 1:size(onehots, 2)
+    onehot = onehots[:, i]
+    mapped = mapped + mappingMatrix * onehot
   end
-  feature = Array(Float32, d)
-  binary = bin(sum, d)
-  for c = 1:length(binary)
-    if binary[c] == '1'
-      feature[c] == 1
-    end
-  end
-  feature = convert(atype, feature)
-  return feature
+  mapped = convert(atype, mapped)
+  return mapped
 end
 
-function s(x, y, u, d, dict, atype)
+function s(x, y, u, d, dict, mappingMatrix, atype)
   score = 0
-  phiy = phi(atype, y, d, dict, 3)
+  phiy = phi(atype, y, d, dict, mappingMatrix, 3)
   if typeof(x) == String
-    phix = phi(atype, x, d, dict, 1)
+    phix = phi(atype, x, d, dict, mappingMatrix, 1)
     current_score = phix' * u' * u * phiy
     current_score = sum(current_score)
     score = score + current_score
@@ -176,9 +193,9 @@ function s(x, y, u, d, dict, atype)
     for i = 1:length(x)
       input = x[i]
       if i == 1
-        phix = phi(atype, input, d, dict, 1)
+        phix = phi(atype, input, d, dict, mappingMatrix, 1)
       else
-        phix = phi(atype, input, d, dict, 2)
+        phix = phi(atype, input, d, dict, mappingMatrix, 2)
       end
       current_score = phix' * u' * u * phiy
       current_score = sum(current_score)
@@ -188,31 +205,31 @@ function s(x, y, u, d, dict, atype)
   return score
 end
 
-function so(x, uo, d, memory, dict, atype)
+function so(x, uo, d, memory, dict, mappingMatrix, atype)
   scorelist = Any[]
   for i = 1:length(memory)
-    score = s(x, memory[i] , uo, d, dict, atype)
+    score = s(x, memory[i] , uo, d, dict, mappingMatrix, atype)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function sr(x, ur, d, dict, atype)
+function sr(x, ur, d, dict, mappingMatrix, atype)
   scorelist = Any[]
   for k in keys(dict)
-    score = s(x, k, ur, d, dict, atype)
+    score = s(x, k, ur, d, dict, mappingMatrix, atype)
     push!(scorelist, score)
   end
   return scorelist
 end
 
-function answer(x, memory, uo, ur, d, dict, atype)
-  output = O(x, memory, uo, d, dict, atype)
-  answer = R(output, dict, ur, d, atype)
+function answer(x, memory, uo, ur, d, dict, mappingMatrix, atype)
+  output = O(x, memory, uo, d, dict, mappingMatrix, atype)
+  answer = R(output, dict, mappingMatrix, ur, d, atype)
   return answer
 end
 
-function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
+function marginRankingLoss(comb, memory, x, gold_labels, d, dict, mappingMatrix, margin, atype)
   uo = comb[1]
   ur = comb[2]
   total_loss = 0
@@ -226,7 +243,7 @@ function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
 
   for i = 1:length(memory)
     if memory[i] != correct_m1
-      m1l = max(0, margin - s(x, correct_m1, uo, d, dict, atype) + s(x, memory[i], uo, d, dict, atype))
+      m1l = max(0, margin - s(x, correct_m1, uo, d, dict, mappingMatrix, atype) + s(x, memory[i], uo, d, dict, mappingMatrix, atype))
       m1_loss = m1_loss + m1l
     end
   end
@@ -234,7 +251,7 @@ function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
   input_m = [x, correct_m1]
   for j = 1:length(memory)
     if memory[j] != correct_m2
-      m2l = max(0, margin - s(input_m, correct_m2, uo, d, dict, atype) + s(input_m, memory[j], uo, d, dict, atype))
+      m2l = max(0, margin - s(input_m, correct_m2, uo, d, dict, mappingMatrix, atype) + s(input_m, memory[j], uo, d, dict, mappingMatrix, atype))
       m2_loss = m2_loss + m2l
     end
   end
@@ -242,7 +259,7 @@ function marginRankingLoss(comb, memory, x, gold_labels, d, dict, margin, atype)
   input_r = [x, correct_m1, correct_m2]
   for k in keys(dict)
     if k != correct_r
-      rl = max(0, margin - s(input_r, correct_r, ur, d, dict, atype) + s(input_r, k, ur, d, dict, atype))
+      rl = max(0, margin - s(input_r, correct_r, ur, d, dict, mappingMatrix, atype) + s(input_r, k, ur, d, dict, mappingMatrix, atype))
       r_loss = r_loss + rl
     end
   end
@@ -253,7 +270,7 @@ end
 
 marginRankingLossGradient = grad(marginRankingLoss)
 
-function train(data_file, uo, ur, memory, d, dict, lr, margin, atype)
+function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, atype)
   total_loss = 0
   numq = 0
   f = open(data_file)
@@ -284,8 +301,8 @@ function train(data_file, uo, ur, memory, d, dict, lr, margin, atype)
       comb = []
       push!(comb, uo)
       push!(comb, ur)
-      loss = marginRankingLoss(comb, memory, question, gold_labels, d, dict, margin, atype)
-      lossGradient = marginRankingLossGradient(comb, memory, question, gold_labels, d, dict, margin, atype)
+      loss = marginRankingLoss(comb, memory, question, gold_labels, d, dict, mappingMatrix, margin, atype)
+      lossGradient = marginRankingLossGradient(comb, memory, question, gold_labels, d, dict, mappingMatrix, margin, atype)
 
       uo = copy!(uo, uo - lr * lossGradient[1])
       ur = copy!(ur, ur - lr * lossGradient[2])
