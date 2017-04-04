@@ -46,11 +46,10 @@ function main(args = ARGS)
   for epoch = 1:total_epochs
     #Memory of the model.
     memory = Any[]
-    @time uo, ur, updated_memory, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space,
+    @time uo, ur, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space,
                                                    dict, mappingMatrix, learning_rate, margin, settings[:atype])
     model[:uo] = uo
     model[:ur] = ur
-    copy!(memory, updated_memory)
     println("(epoch: $epoch, loss: $avg_loss)")
   end
 end
@@ -127,6 +126,8 @@ function R(input, dict, mappingMatrix, ur, d, atype)
   answer = indmax(scorelist)
   return reverseDict[answer]
 end
+
+
 
 #mode = 1 for phix and x comes from the input
 #mode = 2 for phix and x comes from a supporting memory
@@ -278,9 +279,15 @@ function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, at
     str = readline(f)
     words = split(str)
     if words[end][end] == '.'
-      memory = G(str, memory)
+      line_number = words[1]
+      sentence = words[2]
+      for i = 3:length(words)
+        sentence = sentence * " " * words[i]
+      end
+      memory = G(sentence, memory)
     else
       line_number = words[1]
+      line_number = parse(Int, line_number)
       question = words[2]
       for i = 3:(length(words) - 3)
         question = question * " " * words[i]
@@ -291,11 +298,11 @@ function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, at
 
       correct_m1_index = words[length(words) - 1]
       correct_m1_index = parse(Int, correct_m1_index)
-      correct_m1 = memory[length(memory) - (length(memory) - correct_m1_index)]
+      correct_m1 = memory[length(memory) - (line_number - correct_m1_index)]
 
       correct_m2_index = words[length(words)]
       correct_m2_index = parse(Int, correct_m2_index)
-      correct_m2 = memory[length(memory) - (length(memory) - correct_m2_index)]
+      correct_m2 = memory[length(memory) - (line_number - correct_m2_index)]
 
       gold_labels = [correct_m1, correct_m2, correct_r]
       comb = []
@@ -313,7 +320,7 @@ function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, at
   end
   close(f)
   avg_loss = total_loss / numq
-  return uo, ur, memory, avg_loss
+  return uo, ur, avg_loss
 end
 
 main()
