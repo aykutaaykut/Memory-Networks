@@ -44,10 +44,8 @@ function main(args = ARGS)
   mappingMatrix = settings[:winit] * randn(feature_space, feature_space)
 
   for epoch = 1:total_epochs
-    #Memory of the model.
-    memory = Any[]
-    @time uo, ur, avg_loss = train(training_data, model[:uo], model[:ur], memory, feature_space,
-                                                   dict, mappingMatrix, learning_rate, margin, settings[:atype])
+    @time uo, ur, avg_loss = train(training_data, model[:uo], model[:ur], feature_space, dict,
+                                   mappingMatrix, learning_rate, margin, settings[:atype])
     model[:uo] = uo
     model[:ur] = ur
     println("(epoch: $epoch, loss: $avg_loss)")
@@ -230,6 +228,10 @@ function answer(x, memory, uo, ur, d, dict, mappingMatrix, atype)
   return answer
 end
 
+function resetMemory()
+  return Any[]
+end
+
 function marginRankingLoss(comb, memory, x, gold_labels, d, dict, mappingMatrix, margin, atype)
   uo = comb[1]
   ur = comb[2]
@@ -271,9 +273,10 @@ end
 
 marginRankingLossGradient = grad(marginRankingLoss)
 
-function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, atype)
+function train(data_file, uo, ur, d, dict, mappingMatrix, lr, margin, atype)
   total_loss = 0
   numq = 0
+  memory = resetMemory()
   f = open(data_file)
   while !eof(f)
     str = readline(f)
@@ -283,6 +286,9 @@ function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, at
       sentence = words[2]
       for i = 3:length(words)
         sentence = sentence * " " * words[i]
+      end
+      if line_number == 1
+        memory = resetMemory()
       end
       memory = G(sentence, memory)
     else
@@ -313,7 +319,7 @@ function train(data_file, uo, ur, memory, d, dict, mappingMatrix, lr, margin, at
 
       uo = copy!(uo, uo - lr * lossGradient[1])
       ur = copy!(ur, ur - lr * lossGradient[2])
-
+      
       total_loss = total_loss + loss
       numq = numq + 1
     end
