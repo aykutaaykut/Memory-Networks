@@ -17,7 +17,7 @@ function main(args = ARGS)
   embedding_dimension = 100
   learning_rate = 0.01
   margin = 0.1
-  total_epochs = 5 #Actual value is 10
+  total_epochs = 10 #Actual value is 10
 
   #User settings are added.
   settings = parse_commandline()
@@ -62,14 +62,27 @@ end
 
 function parseLineAddDict(number, line, dict)
   words = split(line)
-  for i = 1:length(words)
-    str = words[i]
-    if str[end] == '?' || str[end] == '.'
-      str = str[1:end - 1]
+  if words[end][end] == '.'
+    for i = 2:length(words)
+      str = words[i]
+      if str[end] == '.'
+        str = str[1:end - 1]
+      end
+      if !haskey(dict, str)
+        dict[str] = number
+        number = number + 1
+      end
     end
-    if !haskey(dict, str)
-      dict[str] = number
-      number = number + 1
+  else
+    for i = 2:length(words) - 2
+      str = words[i]
+      if str[end] == '?'
+        str = str[1:end - 1]
+      end
+      if !haskey(dict, str)
+        dict[str] = number
+        number = number + 1
+      end
     end
   end
   return number, dict
@@ -91,7 +104,7 @@ end
 
 function I(x, dict, atype)
   words = split(x)
-  feature_rep = Array(Float64, length(dict), 1)
+  feature_rep = zeros(Float64, length(dict), 1)
   for w in words
     if w[end] == '?' || w[end] == '.'
       w = w[1:end - 1]
@@ -104,14 +117,12 @@ function I(x, dict, atype)
 end
 
 function word2OneHot(word, dict)
-  onehot = Array(Float64, length(dict), 1)
-  i = 1
+  onehot = zeros(Float64, length(dict), 1)
   for w in keys(dict)
     if w == word
-      onehot[i, 1] = 1.0
+      onehot[dict[w], 1] = 1.0
       break
     end
-    i = i + 1
   end
   return onehot
 end
@@ -268,6 +279,9 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       line_number = parse(Int, line_number)
       sentence = words[2]
       for i = 3:length(words)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
         sentence = sentence * " " * words[i]
       end
       if line_number == 1
@@ -280,6 +294,9 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       line_number = parse(Int, line_number)
       question = words[2]
       for i = 3:(length(words) - 3)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
         question = question * " " * words[i]
       end
       question_feature_rep = I(question, vocabDict, atype)
@@ -299,6 +316,9 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       comb = [uo, ur]
       loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
       lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
+
+#      r = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
+#      println(r)
 
       copy!(uo, uo - lr * lossGradient[1])
       copy!(ur, ur - lr * lossGradient[2])
