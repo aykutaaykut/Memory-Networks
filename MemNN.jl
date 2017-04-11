@@ -151,17 +151,20 @@ end
 #mode = 2 for phix and x comes from a supporting memory
 #mode = 3 for phiy
 function phi(feature_rep, mode, atype)
+  mapped = zeros(Float64, 3 * length(feature_rep), 1)
   if mode == 1
-    mapped = copy(feature_rep)
-    mapped = vcat(mapped, zeros(2 * length(feature_rep), 1))
+    for i = 1:length(feature_rep)
+      mapped[i] = feature_rep[i]
+    end
   else
     if mode == 2
-      mapped = zeros(length(feature_rep), 1)
-      mapped = vcat(mapped, feature_rep)
-      mapped = vcat(mapped, zeros(length(feature_rep), 1))
+      for i = 1:length(feature_rep)
+        mapped[length(feature_rep) + i] = feature_rep[i]
+      end
     else
-      mapped = zeros(2 * length(feature_rep), 1)
-      mapped = vcat(mapped, feature_rep)
+      for i = 1:length(feature_rep)
+        mapped[2 * length(feature_rep) + i] = feature_rep[i]
+      end
     end
   end
   mapped = convert(atype, mapped)
