@@ -43,8 +43,9 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
-    @time avg_loss = train(training_data, model[:uo], model[:ur], vocabDict, learning_rate, margin, settings[:atype])
-    println("(epoch: $epoch, loss: $avg_loss)")
+    @time avg_loss, accuracy = train(training_data, model[:uo], model[:ur], vocabDict,
+                                     learning_rate, margin, settings[:atype])
+    println("(epoch: $epoch, loss: $avg_loss, accuracy: $accuracy %)")
   end
 end
 
@@ -267,6 +268,7 @@ end
 marginRankingLossGradient = grad(marginRankingLoss)
 
 function train(data_file, uo, ur, vocabDict, lr, margin, atype)
+  numcorr = 0
   total_loss = 0
   numq = 0
   memory = resetMemory()
@@ -317,8 +319,10 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
       lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
 
-#      r = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
-#      println(r)
+      response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
+      if response == correct_r
+        numcorr = numcorr + 1
+      end
 
       copy!(uo, uo - lr * lossGradient[1])
       copy!(ur, ur - lr * lossGradient[2])
@@ -329,7 +333,8 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
   end
   close(f)
   avg_loss = total_loss / numq
-  return avg_loss
+  accuracy = numcorr / numq * 100
+  return avg_loss, accuracy
 end
 
 function resetMemory()
