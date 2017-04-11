@@ -3,11 +3,11 @@ using Knet, AutoGrad, Compat, ArgParse
 function parse_commandline()
   s = ArgParseSettings()
   @add_arg_table s begin
-    ("--datafiles"; nargs = '+'; help = "If provided, use first file for training, second for dev, others for test.")
-    ("--input"; arg_type = Char; default = 's'; help = "s for sentence sequences, w for word sequences as input")
+    ("--datafiles"; nargs = '+'; help = "If provided, use first file for training, second for test.")
     ("--winit"; arg_type=Float64; default=0.1; help="Initial weights set to winit*randn().")
     ("--seed"; arg_type=Int; default=38; help="Random number seed.")
-    ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float64}" : "Array{Float64}"); help = "Array type: Array for CPU, KnetArray for GPU")
+    ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float64}" : "Array{Float64}");
+                                        help = "Array type: Array for CPU, KnetArray for GPU")
   end
   return parse_args(s; as_symbols = true)
 end
@@ -25,13 +25,10 @@ function main(args = ARGS)
   settings[:seed] > 0 && srand(settings[:seed])
   settings[:atype] = eval(parse(settings[:atype]))
 
-  #Classification of datafiles as training, dev and test.
+  #Classification of datafiles as training and test.
   training_data = settings[:datafiles][1]
   if length(settings[:datafiles]) > 1
-    dev_data = settings[:datafiles][2]
-  end
-  if length(settings[:datafiles]) > 2
-    test_data = settings[:datafiles][3:end]
+    test_data = settings[:datafiles][2]
   end
 
   #Creating the dictionary of words in the data.
@@ -43,9 +40,10 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
-    @time avg_loss, accuracy = train(training_data, model[:uo], model[:ur], vocabDict,
+    @time avg_loss = train(training_data, model[:uo], model[:ur], vocabDict,
                                      learning_rate, margin, settings[:atype])
-    println("(epoch: $epoch, loss: $avg_loss, accuracy: $accuracy %)")
+    @time accuracy = test(test_data, model[:uo], model[:ur], vocabDict, settings[:atype])
+    println("[(epoch: $epoch, loss: $avg_loss)] , [(epoch: $epoch, accuracy: $accuracy %)]")
   end
 end
 
@@ -220,12 +218,6 @@ function sr(x_feature_rep_list, vocabDict, ur, atype)
   return scoreDict
 end
 
-function answer(x_feature_rep, memory, vocabDict, uo, ur, atype)
-  output = O(x_feature_rep, memory, uo, atype)
-  answer = R(output, vocabDict, ur, atype)
-  return answer
-end
-
 function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, margin, atype)
   uo = comb[1]
   ur = comb[2]
@@ -271,7 +263,6 @@ end
 marginRankingLossGradient = grad(marginRankingLoss)
 
 function train(data_file, uo, ur, vocabDict, lr, margin, atype)
-  numcorr = 0
   total_loss = 0
   numq = 0
   memory = resetMemory()
@@ -322,11 +313,6 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
       lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
 
-      response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
-      if response == correct_r
-        numcorr = numcorr + 1
-      end
-
       copy!(uo, uo - lr * lossGradient[1])
       copy!(ur, ur - lr * lossGradient[2])
 
@@ -336,12 +322,68 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
   end
   close(f)
   avg_loss = total_loss / numq
-  accuracy = numcorr / numq * 100
-  return avg_loss, accuracy
+  return avg_loss
 end
 
 function resetMemory()
   return Any[]
+end
+
+function test(data_file, uo, ur, vocabDict, atype)
+  numcorr = 0
+  numq = 0
+  memory = resetMemory()
+  f = open(data_file)
+  while !eof(f)
+    str = readline(f)
+    words = split(str)
+    if words[end][end] == '.'
+      line_number = words[1]
+      line_number = parse(Int, line_number)
+      sentence = words[2]
+      for i = 3:length(words)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
+        sentence = sentence * " " * words[i]
+      end
+      if line_number == 1
+        memory = resetMemory()
+      end
+      sentence_feature_rep = I(sentence, vocabDict, atype)
+      G(sentence_feature_rep, memory)
+    else
+      line_number = words[1]
+      line_number = parse(Int, line_number)
+      question = words[2]
+      for i = 3:(length(words) - 3)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
+        question = question * " " * words[i]
+      end
+      question_feature_rep = I(question, vocabDict, atype)
+      G(question_feature_rep, memory)
+
+      correct_r = words[end - 2]
+
+      response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
+      if response == correct_r
+        numcorr = numcorr + 1
+      end
+
+      numq = numq + 1
+    end
+  end
+  close(f)
+  accuracy = numcorr / numq * 100
+  return accuracy
+end
+
+function answer(x_feature_rep, memory, vocabDict, uo, ur, atype)
+  output = O(x_feature_rep, memory, uo, atype)
+  answer = R(output, vocabDict, ur, atype)
+  return answer
 end
 
 main()
