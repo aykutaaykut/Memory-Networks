@@ -4,7 +4,7 @@ function parse_commandline()
   s = ArgParseSettings()
   @add_arg_table s begin
     ("--datafiles"; nargs = '+'; help = "If provided, use first file for training, second for test.")
-    ("--winit"; arg_type=Float64; default=0.1; help="Initial weights set to winit*randn().")
+    ("--winit"; arg_type=Float64; default=0.01; help="Initial weights set to winit*randn().")
     ("--seed"; arg_type=Int; default=38; help="Random number seed.")
     ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float64}" : "Array{Float64}");
                                         help = "Array type: Array for CPU, KnetArray for GPU")
@@ -32,7 +32,7 @@ function main(args = ARGS)
   end
 
   #Creating the dictionary of words in the data.
-  vocabDict = createDict(training_data)
+  vocabDict = createDict([training_data, test_data])
   vocabDict_length = length(vocabDict)
   info("$vocabDict_length unique words.")
   feature_space = 3 * vocabDict_length
@@ -47,15 +47,17 @@ function main(args = ARGS)
   end
 end
 
-function createDict(training_data)
+function createDict(datafiles)
   dict = Dict{String, Int}()
   number = 1
-  f = open(training_data)
-  while !eof(f)
-    str = readline(f)
-    number, dict = parseLineAddDict(number, str, dict)
+  for file in datafiles
+    f = open(file)
+    while !eof(f)
+      str = readline(f)
+      number, dict = parseLineAddDict(number, str, dict)
+    end
+    close(f)
   end
-  close(f)
   return dict
 end
 
