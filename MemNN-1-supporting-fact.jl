@@ -75,7 +75,7 @@ function parseLineAddDict(number, line, dict)
       end
     end
   else
-    for i = 2:length(words) - 2
+    for i = 2:length(words) - 1
       str = words[i]
       if str[end] == '?'
         str = str[1:end - 1]
@@ -224,8 +224,7 @@ function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, 
   r_loss = 0
 
   correct_m1 = gold_labels[1]
-  correct_m2 = gold_labels[2]
-  correct_r = gold_labels[3]
+  correct_r = gold_labels[2]
 
   input_1 = [x_feature_rep]
   for i = 1:length(memory)
@@ -235,16 +234,8 @@ function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, 
     end
   end
 
-  input_2 = [x_feature_rep, correct_m1]
-  for j = 1:length(memory)
-    if memory[j] != correct_m2
-      m2l = max(0, margin - s(input_2, correct_m2, uo, atype) + s(input_2, memory[j], uo, atype))
-      m2_loss = m2_loss + m2l
-    end
-  end
-
   correct_r_feature_rep = word2OneHot(correct_r, vocabDict)
-  input_r = [x_feature_rep, correct_m1, correct_m2]
+  input_r = [x_feature_rep, correct_m1]
   for k in keys(vocabDict)
     if k != correct_r
       k_feature_rep = word2OneHot(k, vocabDict)
@@ -253,7 +244,7 @@ function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, 
     end
   end
 
-  total_loss = m1_loss + m2_loss + r_loss
+  total_loss = m1_loss + r_loss
   return total_loss
 end
 
@@ -286,7 +277,7 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       line_number = words[1]
       line_number = parse(Int, line_number)
       question = words[2]
-      for i = 3:(length(words) - 3)
+      for i = 3:(length(words) - 2)
         if words[i][end] == '?' || words[i][end] == '.'
           words[i] = words[i][1:end - 1]
         end
@@ -295,17 +286,13 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       question_feature_rep = I(question, vocabDict, atype)
       G(question_feature_rep, memory)
 
-      correct_r = words[end - 2]
+      correct_r = words[end - 1]
 
-      correct_m1_index = words[end - 1]
+      correct_m1_index = words[end]
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
-      correct_m2_index = words[end]
-      correct_m2_index = parse(Int, correct_m2_index)
-      correct_m2 = memory[correct_m2_index]
-
-      gold_labels = [correct_m1, correct_m2, correct_r]
+      gold_labels = [correct_m1, correct_r]
       comb = [uo, ur]
       loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
       lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
@@ -353,7 +340,7 @@ function test(data_file, uo, ur, vocabDict, atype)
       line_number = words[1]
       line_number = parse(Int, line_number)
       question = words[2]
-      for i = 3:(length(words) - 3)
+      for i = 3:(length(words) - 2)
         if words[i][end] == '?' || words[i][end] == '.'
           words[i] = words[i][1:end - 1]
         end
@@ -362,7 +349,7 @@ function test(data_file, uo, ur, vocabDict, atype)
       question_feature_rep = I(question, vocabDict, atype)
       G(question_feature_rep, memory)
 
-      correct_r = words[end - 2]
+      correct_r = words[end - 1]
 
       response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
       if response == correct_r
