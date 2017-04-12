@@ -43,7 +43,7 @@ function main(args = ARGS)
     @time avg_loss = train(training_data, model[:uo], model[:ur], vocabDict,
                                      learning_rate, margin, settings[:atype])
     @time accuracy = test(test_data, model[:uo], model[:ur], vocabDict, settings[:atype])
-    println("[(epoch: $epoch, loss: $avg_loss)] , [(epoch: $epoch, accuracy: $accuracy %)]")
+    println("[Training => (epoch: $epoch, loss: $avg_loss)] , [Test => (epoch: $epoch, accuracy: $accuracy %)]")
   end
 end
 
