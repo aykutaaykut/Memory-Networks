@@ -13,11 +13,11 @@ function parse_commandline()
 end
 
 function main(args = ARGS)
-  #Fixed configurations for baseline model
+  #Configurations of the model
   embedding_dimension = 100
   learning_rate = 0.01
   margin = 0.1
-  total_epochs = 10 #Actual value is 10
+  total_epochs = 100
 
   #User settings are added.
   settings = parse_commandline()
@@ -40,10 +40,9 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
-    @time avg_loss, training_accuracy = train(training_data, model[:uo], model[:ur], vocabDict,
-                                              learning_rate, margin, settings[:atype])
-    @time test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, settings[:atype])
-    println("[Training => (epoch: $epoch, loss: $avg_loss, accuracy: $training_accuracy)] , [Test => (epoch: $epoch, accuracy: $test_accuracy %)]")
+    @time training_avg_loss, training_accuracy = train(training_data, model[:uo], model[:ur], vocabDict, learning_rate, margin, settings[:atype])
+    @time test_avg_loss, test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, margin, settings[:atype])
+    println("[Training => (epoch: $epoch, loss: $training_avg_loss, accuracy: $training_accuracy %)] , [Test => (epoch: $epoch, loss: $test_avg_loss, accuracy: $test_accuracy %)]")
   end
 end
 
@@ -138,7 +137,6 @@ function O(x_feature_rep, memory, uo, atype)
   scoreDict1 = so(x_feature_rep_list, memory, uo, atype)
   o1 = scoreDict1[maximum(keys(scoreDict1))]
   mo1 = memory[o1]
-
   return [x_feature_rep, mo1]
 end
 
@@ -320,8 +318,9 @@ function resetMemory()
   return Any[]
 end
 
-function test(data_file, uo, ur, vocabDict, atype)
+function test(data_file, uo, ur, vocabDict, margin, atype)
   numcorr = 0
+  total_loss = 0
   numq = 0
   memory = resetMemory()
   f = open(data_file)
@@ -358,17 +357,27 @@ function test(data_file, uo, ur, vocabDict, atype)
 
       correct_r = words[end - 1]
 
+      correct_m1_index = words[end]
+      correct_m1_index = parse(Int, correct_m1_index)
+      correct_m1 = memory[correct_m1_index]
+
+      gold_labels = [correct_m1, correct_r]
+      comb = [uo, ur]
+      loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
+
       response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
       if response == correct_r
         numcorr = numcorr + 1
       end
 
+      total_loss = total_loss + loss
       numq = numq + 1
     end
   end
   close(f)
-  accuracy = numcorr / numq * 100
-  return accuracy
+  test_accuracy = numcorr / numq * 100
+  avg_loss = total_loss / numq
+  return avg_loss, test_accuracy
 end
 
 function answer(x_feature_rep, memory, vocabDict, uo, ur, atype)
