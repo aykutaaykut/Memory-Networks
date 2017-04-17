@@ -40,9 +40,10 @@ function main(args = ARGS)
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
   for epoch = 1:total_epochs
-    @time training_avg_loss, training_accuracy = train(training_data, model[:uo], model[:ur], vocabDict, learning_rate, margin, settings[:atype])
+    @time training_avg_loss = train(training_data, model[:uo], model[:ur], vocabDict, learning_rate, margin, settings[:atype])
+    o_accuracy, r_accuracy = trainingAccuracy(training_data, model[:uo], model[:ur], vocabDict, settings[:atype])
     @time test_avg_loss, test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, margin, settings[:atype])
-    println("[Training => (epoch: $epoch, loss: $training_avg_loss, accuracy: $training_accuracy %)] , [Test => (epoch: $epoch, loss: $test_avg_loss, accuracy: $test_accuracy %)]")
+    println("[Training => (epoch: $epoch, loss: $training_avg_loss, o_accuracy: $o_accuracy %, r_accuracy: $r_accuracy %)] , [Test => (epoch: $epoch, loss: $test_avg_loss, accuracy: $test_accuracy %)]")
   end
 end
 
@@ -249,7 +250,6 @@ end
 marginRankingLossGradient = grad(marginRankingLoss)
 
 function train(data_file, uo, ur, vocabDict, lr, margin, atype)
-  numcorr = 0
   total_loss = 0
   numq = 0
   memory = resetMemory()
@@ -296,11 +296,6 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
       lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
 
-      response = R([question_feature_rep, correct_m1], vocabDict, ur, atype)
-      if response == correct_r
-        numcorr = numcorr + 1
-      end
-
       copy!(uo, uo - lr * lossGradient[1])
       copy!(ur, ur - lr * lossGradient[2])
 
@@ -309,13 +304,74 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
     end
   end
   close(f)
-  training_accuracy = numcorr / numq * 100
   avg_loss = total_loss / numq
-  return avg_loss, training_accuracy
+  return avg_loss
 end
 
 function resetMemory()
   return Any[]
+end
+
+function trainingAccuracy(data_file, uo, ur, vocabDict, atype)
+  numsup = 0
+  numcorr = 0
+  numq = 0
+  memory = resetMemory()
+  f = open(data_file)
+  while !eof(f)
+    str = readline(f)
+    words = split(str)
+    if words[end][end] == '.'
+      line_number = words[1]
+      line_number = parse(Int, line_number)
+      sentence = words[2]
+      for i = 3:length(words)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
+        sentence = sentence * " " * words[i]
+      end
+      if line_number == 1
+        memory = resetMemory()
+      end
+      sentence_feature_rep = I(sentence, vocabDict, atype)
+      G(sentence_feature_rep, memory)
+    else
+      line_number = words[1]
+      line_number = parse(Int, line_number)
+      question = words[2]
+      for i = 3:(length(words) - 2)
+        if words[i][end] == '?' || words[i][end] == '.'
+          words[i] = words[i][1:end - 1]
+        end
+        question = question * " " * words[i]
+      end
+      question_feature_rep = I(question, vocabDict, atype)
+      G(question_feature_rep, memory)
+
+      correct_r = words[end - 1]
+
+      correct_m1_index = words[end]
+      correct_m1_index = parse(Int, correct_m1_index)
+      correct_m1 = memory[correct_m1_index]
+
+      output = O(question_feature_rep, memory, uo, atype)
+      if in(correct_m1, output)
+        numsup = numsup + 1
+      end
+
+      response = R([question_feature_rep, correct_m1], vocabDict, ur, atype)
+      if response == correct_r
+        numcorr = numcorr + 1
+      end
+
+      numq = numq + 1
+    end
+  end
+  close(f)
+  output_accuracy = numsup / numq * 100
+  response_accuracy = numcorr / numq * 100
+  return output_accuracy, response_accuracy
 end
 
 function test(data_file, uo, ur, vocabDict, margin, atype)
