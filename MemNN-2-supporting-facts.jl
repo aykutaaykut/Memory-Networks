@@ -35,7 +35,7 @@ function main(args = ARGS)
   vocabDict = createDict([training_data, test_data])
   vocabDict_length = length(vocabDict)
   info("$vocabDict_length unique words.")
-  feature_space = 3 * vocabDict_length
+  feature_space = 4 * vocabDict_length
 
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
 
@@ -147,23 +147,19 @@ function O(x_feature_rep, memory, uo, atype)
   return [x_feature_rep, mo1, mo2]
 end
 
-#mode = 1 for phix and x comes from the input
-#mode = 2 for phix and x comes from a supporting memory
-#mode = 3 for phiy
-function phi(feature_rep, mode, atype)
-  mapped = zeros(Float64, 3 * length(feature_rep), 1)
-  if mode == 1
-    for i = 1:length(feature_rep)
-      mapped[i] = feature_rep[i]
-    end
-  else
-    if mode == 2
-      for i = 1:length(feature_rep)
-        mapped[length(feature_rep) + i] = feature_rep[i]
-      end
-    else
-      for i = 1:length(feature_rep)
-        mapped[2 * length(feature_rep) + i] = feature_rep[i]
+function phix(feature_rep_list, atype)
+  mapped = zeros(Float64, 4 * length(feature_rep_list[1]), 1)
+  for i = 1:length(feature_rep_list)
+    feature_rep = feature_rep_list[i]
+    for j = 1:length(feature_rep)
+      if i == 1
+        mapped[j] = feature_rep[j]
+      else
+        if i == 2
+          mapped[length(feature_rep) + j] = feature_rep[j]
+        else
+          mapped[2 * length(feature_rep) + j] = feature_rep[j]
+        end
       end
     end
   end
@@ -171,27 +167,19 @@ function phi(feature_rep, mode, atype)
   return mapped
 end
 
-function s(x_feature_rep_list, y_feature_rep, u, atype)
-  score = 0
-  phiy = phi(y_feature_rep, 3, atype)
-  if length(x_feature_rep_list) == 1
-    phix = phi(x_feature_rep_list[1], 1, atype)
-    current_score = phix' * u' * u * phiy
-    current_score = sum(current_score)
-    score = score + current_score
-  else
-    for i = 1:length(x_feature_rep_list)
-      input = x_feature_rep_list[i]
-      if i == 1
-        phix = phi(input, 1, atype)
-      else
-        phix = phi(input, 2, atype)
-      end
-      current_score = phix' * u' * u * phiy
-      current_score = sum(current_score)
-      score = score + current_score
-    end
+function phiy(feature_rep, atype)
+  mapped = zeros(Float64, 4 * length(feature_rep), 1)
+  for i = 1:length(feature_rep)
+    mapped[3 * length(feature_rep) + i] = feature_rep[i]
   end
+  mapped = convert(atype, mapped)
+  return mapped
+end
+
+function s(x_feature_rep_list, y_feature_rep, u, atype)
+  phi_y = phiy(y_feature_rep, atype)
+  phi_x = phix(x_feature_rep_list, atype)
+  score = sum(phi_x' * u' * u * phi_y)
   return score
 end
 
