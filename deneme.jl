@@ -4,10 +4,9 @@ function parse_commandline()
   s = ArgParseSettings()
   @add_arg_table s begin
     ("--datafiles"; nargs = '+'; help = "If provided, use first file for training, second for test.")
-    ("--winit"; arg_type=Float64; default=0.01; help="Initial weights set to winit*randn().")
+    ("--winit"; arg_type=Float64; default=0.1; help="Initial weights set to winit*randn().")
     ("--seed"; arg_type=Int; default=38; help="Random number seed.")
-    ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float64}" : "Array{Float64}");
-                                        help = "Array type: Array for CPU, KnetArray for GPU")
+    ("--atype"; default = (gpu() >= 0 ? "KnetArray{Float64}" : "Array{Float64}"); help = "Array type: Array for CPU, KnetArray for GPU")
   end
   return parse_args(s; as_symbols = true)
 end
@@ -15,8 +14,8 @@ end
 function main(args = ARGS)
   #Configurations of the model
   embedding_dimension = 100
-  learning_rate = 0.01
-  margin = 0.1
+  uo_lr = 0.001
+  ur_lr = 0.001
   total_epochs = 100
 
   #User settings are added.
@@ -38,12 +37,14 @@ function main(args = ARGS)
   feature_space = 3 * vocabDict_length
 
   model = initWeights(settings[:atype], feature_space, embedding_dimension, settings[:winit])
+  uo_adam = Adam(;lr = uo_lr)
+  ur_adam = Adam(;lr = ur_lr)
 
-  for epoch = 1:total_epochs
-    @time training_avg_loss = train(training_data, model[:uo], model[:ur], vocabDict, learning_rate, margin, settings[:atype])
+  for epoch = 0:total_epochs
+    @time o_avg_loss, r_avg_loss = train(training_data, model[:uo], model[:ur], vocabDict, uo_adam, ur_adam, settings[:atype], epoch)
     o_accuracy, r_accuracy = trainingAccuracy(training_data, model[:uo], model[:ur], vocabDict, settings[:atype])
-    @time test_avg_loss, test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, margin, settings[:atype])
-    println("[Training => (epoch: $epoch, loss: $training_avg_loss, o_accuracy: $o_accuracy %, r_accuracy: $r_accuracy %)] , [Test => (epoch: $epoch, loss: $test_avg_loss, accuracy: $test_accuracy %)]")
+    @time test_o_avg_loss, test_r_avg_loss, test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, settings[:atype])
+    println("Epoch: $epoch, [o_loss: $o_avg_loss, r_loss: $r_avg_loss, o_accuracy: $o_accuracy %, r_accuracy: $r_accuracy %], [o_loss: $test_o_avg_loss, r_loss: $test_r_avg_loss, accuracy: $test_accuracy %]")
   end
 end
 
@@ -136,21 +137,20 @@ end
 function O(x_feature_rep, memory, uo, atype)
   x_feature_rep_list = [x_feature_rep]
   scoreArray = so(x_feature_rep_list, memory, uo, atype)
-  o1 = indmax(scoreArray)
+  scoreArray = scoreArray .- maximum(scoreArray, 1)
+  scoreProb = exp(scoreArray) ./ sum(exp(scoreArray), 1)
+  o1 = indmax(scoreProb)
   mo1 = memory[o1]
   return [x_feature_rep, mo1]
 end
 
 function phix(feature_rep_list, atype)
-  mapped = zeros(Float64, 3 * length(feature_rep_list[1]), 1)
-  for i = 1:length(feature_rep_list)
-    feature_rep = feature_rep_list[i]
-    for j = 1:length(feature_rep)
-      if i == 1
-        mapped[j] = feature_rep[j]
-      else
-        mapped[length(feature_rep) + j] = feature_rep[j]
-      end
+  mapped = copy(feature_rep_list[1])
+  for i = 2:3
+    if i <= length(feature_rep_list)
+      mapped = vcat(mapped, feature_rep_list[i])
+    else
+      mapped = vcat(mapped, zeros(Float64, length(feature_rep_list[1]), 1))
     end
   end
   mapped = convert(atype, mapped)
@@ -158,10 +158,8 @@ function phix(feature_rep_list, atype)
 end
 
 function phiy(feature_rep, atype)
-  mapped = zeros(Float64, 3 * length(feature_rep), 1)
-  for i = 1:length(feature_rep)
-    mapped[2 * length(feature_rep) + i] = feature_rep[i]
-  end
+  mapped = copy(feature_rep)
+  mapped = vcat(zeros(Float64, 2 * length(feature_rep), 1), mapped)
   mapped = convert(atype, mapped)
   return mapped
 end
@@ -174,59 +172,74 @@ function s(x_feature_rep_list, y_feature_rep, u, atype)
 end
 
 function so(x_feature_rep_list, memory, uo, atype)
-  scoreArray = zeros(Float64, length(memory), 1)
-  for i = 1:length(memory)
-    score = s(x_feature_rep_list, memory[i], uo, atype)
-    scoreArray[i, 1] = score
+  scoreArray = s(x_feature_rep_list, memory[1], uo, atype)
+  for i = 2:length(memory)
+    if memory[i] == x_feature_rep_list[1]
+      score = -Inf
+    else
+      score = s(x_feature_rep_list, memory[i], uo, atype)
+    end
+    scoreArray = vcat(scoreArray, score)
   end
   return scoreArray
 end
 
 function R(input_list, vocabDict, ur, atype)
   scoreArray = sr(input_list, vocabDict, ur, atype)
+  scoreArray = scoreArray .- maximum(scoreArray, 1)
+  scoreProb = exp(scoreArray) ./ sum(exp(scoreArray), 1)
   index = indmax(scoreArray)
   for k in keys(vocabDict)
     if vocabDict[k] == index
-      answer = k
+      return k
     end
   end
-  return answer
 end
 
 function sr(x_feature_rep_list, vocabDict, ur, atype)
-  scoreArray = zeros(Float64, length(vocabDict), 1)
-  for k in keys(vocabDict)
-    y_feature_rep = word2OneHot(k, vocabDict)
+  w = findWord(vocabDict, 1)
+  y_feature_rep = word2OneHot(w, vocabDict)
+  scoreArray = s(x_feature_rep_list, y_feature_rep, ur, atype)
+  for i = 2:length(vocabDict)
+    w = findWord(vocabDict, i)
+    y_feature_rep = word2OneHot(w, vocabDict)
     score = s(x_feature_rep_list, y_feature_rep, ur, atype)
-    scoreArray[vocabDict[k], 1] = score
+    scoreArray = vcat(scoreArray, score)
   end
   return scoreArray
 end
 
-function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, margin, atype)
-  uo = comb[1]
-  ur = comb[2]
-
-  input_1 = [x_feature_rep]
-  uoArray = so(input_1, memory, uo, atype)
-  uoArray = uoArray .- maximum(uoArray, 1)
-  uoProb = exp(uoArray) ./ sum(exp(uoArray), 1)
-  uoLoss = (-1) * log(uoProb[gold_labels[1]])
-
-  correct_m1 = memory[gold_labels[1]]
-  input_r = [x_feature_rep, correct_m1]
-  urArray = sr(input_r, vocabDict, ur, atype)
-  urArray = urArray .- maximum(urArray, 1)
-  urProb = exp(urArray) ./ sum(exp(urArray), 1)
-  urLoss = (-1) * log(urProb[vocabDict[gold_labels[2]]])
-
-  return uoLoss + urLoss
+function findWord(vocabDict, i)
+  for k in keys(vocabDict)
+    if vocabDict[k] == i
+      return k
+    end
+  end
 end
 
-marginRankingLossGradient = grad(marginRankingLoss)
+function uoSoftloss(uo, x_feature_rep_list, memory, vocabDict, golds, atype)
+  uoArray = so(x_feature_rep_list, memory, uo, atype)
+  uoArray = uoArray .- maximum(uoArray, 1)
+  uoProb = exp(uoArray) ./ sum(exp(uoArray), 1)
+  uoLoss = (-1) * sum(log(uoProb[golds]))
+  return uoLoss
+end
 
-function train(data_file, uo, ur, vocabDict, lr, margin, atype)
-  total_loss = 0
+uoSoftlossGrad = grad(uoSoftloss)
+
+function urSoftloss(ur, x_feature_rep_list, memory, vocabDict, gold, atype)
+  urArray = sr(x_feature_rep_list, vocabDict, ur, atype)
+  urArray = urArray .- maximum(urArray, 1)
+  urProb = exp(urArray) ./ sum(exp(urArray), 1)
+  urLoss = (-1) * log(urProb[vocabDict[gold]])
+  return urLoss
+end
+
+urSoftlossGrad = grad(urSoftloss)
+
+function train(data_file, uo, ur, vocabDict, uo_adam, ur_adam, atype, epoch)
+  uo_total_loss = 0
+  ur_total_loss = 0
   numq = 0
   memory = resetMemory()
   f = open(data_file)
@@ -267,21 +280,27 @@ function train(data_file, uo, ur, vocabDict, lr, margin, atype)
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
-      gold_labels = [correct_m1_index, correct_r]
-      comb = [uo, ur]
-      loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
-      lossGradient = marginRankingLossGradient(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
+      uoGolds = [correct_m1_index]
+      uoLoss = uoSoftloss(uo, [question_feature_rep], memory, vocabDict, uoGolds, atype)
+      uoLossGradient = uoSoftlossGrad(uo, [question_feature_rep], memory, vocabDict, uoGolds, atype)
 
-      copy!(uo, uo - lr * lossGradient[1])
-      copy!(ur, ur - lr * lossGradient[2])
+      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
+      urLossGradient = urSoftlossGrad(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
 
-      total_loss = total_loss + loss
+      if epoch != 0
+        update!(uo, uoLossGradient, uo_adam)
+        update!(ur, urLossGradient, ur_adam)
+      end
+
+      uo_total_loss = uo_total_loss + uoLoss
+      ur_total_loss = ur_total_loss + urLoss
       numq = numq + 1
     end
   end
   close(f)
-  avg_loss = total_loss / numq
-  return avg_loss
+  uo_avg_loss = uo_total_loss / numq
+  ur_avg_loss = ur_total_loss / numq
+  return uo_avg_loss, ur_avg_loss
 end
 
 function resetMemory()
@@ -350,9 +369,10 @@ function trainingAccuracy(data_file, uo, ur, vocabDict, atype)
   return output_accuracy, response_accuracy
 end
 
-function test(data_file, uo, ur, vocabDict, margin, atype)
+function test(data_file, uo, ur, vocabDict, atype)
   numcorr = 0
-  total_loss = 0
+  uo_total_loss = 0
+  ur_total_loss = 0
   numq = 0
   memory = resetMemory()
   f = open(data_file)
@@ -393,23 +413,26 @@ function test(data_file, uo, ur, vocabDict, margin, atype)
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
-      gold_labels = [correct_m1_index, correct_r]
-      comb = [uo, ur]
-      loss = marginRankingLoss(comb, question_feature_rep, memory, vocabDict, gold_labels, margin, atype)
+      uoGolds = [correct_m1_index]
+      uoLoss = uoSoftloss(uo, [question_feature_rep], memory, vocabDict, uoGolds, atype)
+
+      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
 
       response = answer(question_feature_rep, memory, vocabDict, uo, ur, atype)
       if response == correct_r
         numcorr = numcorr + 1
       end
 
-      total_loss = total_loss + loss
+      uo_total_loss = uo_total_loss + uoLoss
+      ur_total_loss = ur_total_loss + urLoss
       numq = numq + 1
     end
   end
   close(f)
   test_accuracy = numcorr / numq * 100
-  avg_loss = total_loss / numq
-  return avg_loss, test_accuracy
+  uo_avg_loss = uo_total_loss / numq
+  ur_avg_loss = ur_total_loss / numq
+  return uo_avg_loss, ur_avg_loss, test_accuracy
 end
 
 function answer(x_feature_rep, memory, vocabDict, uo, ur, atype)
