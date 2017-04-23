@@ -211,14 +211,14 @@ function marginRankingLoss(comb, x_feature_rep, memory, vocabDict, gold_labels, 
   uoArray = so(input_1, memory, uo, atype)
   uoArray = uoArray .- maximum(uoArray, 1)
   uoProb = exp(uoArray) ./ sum(exp(uoArray), 1)
-  uoLoss = (-1) * uoProb[gold_labels[1]]
+  uoLoss = (-1) * log(uoProb[gold_labels[1]])
 
   correct_m1 = memory[gold_labels[1]]
   input_r = [x_feature_rep, correct_m1]
   urArray = sr(input_r, vocabDict, ur, atype)
   urArray = urArray .- maximum(urArray, 1)
   urProb = exp(urArray) ./ sum(exp(urArray), 1)
-  urLoss = (-1) * urProb[vocabDict[gold_labels[2]]]
+  urLoss = (-1) * log(urProb[vocabDict[gold_labels[2]]])
 
   return uoLoss + urLoss
 end
