@@ -182,7 +182,7 @@ end
 function so(x_feature_rep_list, memory, q_list, uo, atype)
   scoreArray = s(x_feature_rep_list, memory[1], uo, atype)
   for i = 2:length(memory)
-    if in(i, q_list) || in(memory[i], x_feature_rep_list)
+    if in(i, q_list)
       score = -Inf
     else
       score = s(x_feature_rep_list, memory[i], uo, atype)
