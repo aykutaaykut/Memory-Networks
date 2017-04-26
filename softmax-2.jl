@@ -76,7 +76,7 @@ function parseLineAddDict(number, line, dict)
       end
     end
   else
-    for i = 2:length(words) - 1
+    for i = 2:length(words) - 2
       str = words[i]
       if str[end] == '?'
         str = str[1:end - 1]
@@ -135,13 +135,21 @@ function G(feature_rep, memory)
 end
 
 function O(x_feature_rep, memory, q_list, uo, atype)
-  x_feature_rep_list = [x_feature_rep]
-  scoreArray = so(x_feature_rep_list, memory, q_list, uo, atype)
-  scoreArray = scoreArray .- maximum(scoreArray, 1)
-  scoreProb = exp(scoreArray) ./ sum(exp(scoreArray), 1)
-  o1 = indmax(scoreProb)
+  x_feature_rep_list1 = [x_feature_rep]
+  scoreArray1 = so(x_feature_rep_list1, memory, q_list, uo, atype)
+  scoreArray1 = scoreArray1 .- maximum(scoreArray1, 1)
+  scoreProb1 = exp(scoreArray1) ./ sum(exp(scoreArray1), 1)
+  o1 = indmax(scoreProb1)
   mo1 = memory[o1]
-  return [x_feature_rep, mo1]
+
+  x_feature_rep_list2 = [x_feature_rep, mo1]
+  scoreArray2 = so(x_feature_rep_list2, memory, q_list, uo, atype)
+  scoreArray2 = scoreArray2 .- maximum(scoreArray2, 1)
+  scoreProb2 = exp(scoreArray2) ./ sum(exp(scoreArray2), 1)
+  o2 = indmax(scoreProb2)
+  mo2 = memory[o2]
+
+  return [x_feature_rep, mo1, mo2]
 end
 
 function phix(feature_rep_list, atype)
@@ -174,7 +182,7 @@ end
 function so(x_feature_rep_list, memory, q_list, uo, atype)
   scoreArray = s(x_feature_rep_list, memory[1], uo, atype)
   for i = 2:length(memory)
-    if in(i, q_list)
+    if in(i, q_list) || in(memory[i], x_feature_rep_list)
       score = -Inf
     else
       score = s(x_feature_rep_list, memory[i], uo, atype)
@@ -267,7 +275,7 @@ function train(data_file, uo, ur, vocabDict, uo_adam, ur_adam, atype, epoch)
       line_number = words[1]
       line_number = parse(Int, line_number)
       question = words[2]
-      for i = 3:(length(words) - 2)
+      for i = 3:(length(words) - 3)
         if words[i][end] == '?' || words[i][end] == '.'
           words[i] = words[i][1:end - 1]
         end
@@ -277,18 +285,22 @@ function train(data_file, uo, ur, vocabDict, uo_adam, ur_adam, atype, epoch)
       G(question_feature_rep, memory)
       push!(q_list, line_number)
 
-      correct_r = words[end - 1]
+      correct_r = words[end - 2]
 
-      correct_m1_index = words[end]
+      correct_m1_index = words[end - 1]
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
-      uoGolds = [correct_m1_index]
+      correct_m2_index = words[end]
+      correct_m2_index = parse(Int, correct_m2_index)
+      correct_m2 = memory[correct_m2_index]
+
+      uoGolds = [correct_m1_index, correct_m2_index]
       uoLoss = uoSoftloss(uo, [question_feature_rep], memory, q_list, vocabDict, uoGolds, atype)
       uoLossGradient = uoSoftlossGrad(uo, [question_feature_rep], memory, q_list, vocabDict, uoGolds, atype)
 
-      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
-      urLossGradient = urSoftlossGrad(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
+      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1, correct_m2], memory, vocabDict, correct_r, atype)
+      urLossGradient = urSoftlossGrad(ur, [question_feature_rep, correct_m1, correct_m2], memory, vocabDict, correct_r, atype)
 
       if epoch != 0
         update!(uo, uoLossGradient, uo_adam)
@@ -350,18 +362,22 @@ function trainingAccuracy(data_file, uo, ur, vocabDict, atype)
       G(question_feature_rep, memory)
       push!(q_list, line_number)
 
-      correct_r = words[end - 1]
+      correct_r = words[end - 2]
 
-      correct_m1_index = words[end]
+      correct_m1_index = words[end - 1]
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
+      correct_m2_index = words[end]
+      correct_m2_index = parse(Int, correct_m2_index)
+      correct_m2 = memory[correct_m2_index]
+
       output = O(question_feature_rep, memory, q_list, uo, atype)
-      if in(correct_m1, output)
+      if in(correct_m1, output) && in(correct_m2, output)
         numsup = numsup + 1
       end
 
-      response = R([question_feature_rep, correct_m1], vocabDict, ur, atype)
+      response = R([question_feature_rep, correct_m1, correct_m2], vocabDict, ur, atype)
       if response == correct_r
         numcorr = numcorr + 1
       end
@@ -416,16 +432,20 @@ function test(data_file, uo, ur, vocabDict, atype)
       G(question_feature_rep, memory)
       push!(q_list, line_number)
 
-      correct_r = words[end - 1]
+      correct_r = words[end - 2]
 
-      correct_m1_index = words[end]
+      correct_m1_index = words[end - 1]
       correct_m1_index = parse(Int, correct_m1_index)
       correct_m1 = memory[correct_m1_index]
 
-      uoGolds = [correct_m1_index]
+      correct_m2_index = words[end]
+      correct_m2_index = parse(Int, correct_m2_index)
+      correct_m2 = memory[correct_m2_index]
+
+      uoGolds = [correct_m1_index, correct_m2_index]
       uoLoss = uoSoftloss(uo, [question_feature_rep], memory, q_list, vocabDict, uoGolds, atype)
 
-      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1], memory, vocabDict, correct_r, atype)
+      urLoss = urSoftloss(ur, [question_feature_rep, correct_m1, correct_m2], memory, vocabDict, correct_r, atype)
 
       response = answer(question_feature_rep, memory, q_list, vocabDict, uo, ur, atype)
       if response == correct_r
