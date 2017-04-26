@@ -44,7 +44,7 @@ function main(args = ARGS)
     @time o_avg_loss, r_avg_loss = train(training_data, model[:uo], model[:ur], vocabDict, uo_adam, ur_adam, settings[:atype], epoch)
     o_accuracy, r_accuracy = trainingAccuracy(training_data, model[:uo], model[:ur], vocabDict, settings[:atype])
     @time test_o_avg_loss, test_r_avg_loss, test_accuracy = test(test_data, model[:uo], model[:ur], vocabDict, settings[:atype])
-    println("Epoch: $epoch, [o_loss: $o_avg_loss, r_loss: $r_avg_loss, o_accuracy: $o_accuracy %, r_accuracy: $r_accuracy %], [o_loss: $test_o_avg_loss, r_loss: $test_r_avg_loss, accuracy: $test_accuracy %]")
+    println("Epoch: $epoch => [o_loss: $o_avg_loss, r_loss: $r_avg_loss, o_accuracy: $o_accuracy %, r_accuracy: $r_accuracy %], [o_loss: $test_o_avg_loss, r_loss: $test_r_avg_loss, accuracy: $test_accuracy %]")
   end
 end
 
