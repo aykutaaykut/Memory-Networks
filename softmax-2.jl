@@ -225,11 +225,20 @@ function findWord(vocabDict, i)
   end
 end
 
-function uoSoftloss(uo, x_feature_rep_list, memory, q_list, vocabDict, golds, atype)
-  uoArray = so(x_feature_rep_list, memory, q_list, uo, atype)
-  uoArray = uoArray .- maximum(uoArray, 1)
-  uoProb = exp(uoArray) ./ sum(exp(uoArray), 1)
-  uoLoss = (-1) * sum(log(uoProb[golds]))
+function uoSoftloss(uo, x_feature_rep_list1, memory, q_list, vocabDict, golds, atype)
+  uoArray1 = so(x_feature_rep_list1, memory, q_list, uo, atype)
+  uoArray1 = uoArray1 .- maximum(uoArray1, 1)
+  uoProb1 = exp(uoArray1) ./ sum(exp(uoArray1), 1)
+  o1 = indmax(uoProb1)
+  mo1 = memory[o1]
+  uoLoss = (-1) * log(uoProb1[golds[1]])
+
+  x_feature_rep_list2 = [x_feature_rep_list1[1], mo1]
+  uoArray2 = so(x_feature_rep_list2, memory, q_list, uo, atype)
+  uoArray2 = uoArray2 .- maximum(uoArray2, 1)
+  uoProb2 = exp(uoArray2) ./ sum(exp(uoArray2), 1)
+  uoLoss = uoLoss + (-1) * log(uoProb2[golds[2]])
+
   return uoLoss
 end
 
