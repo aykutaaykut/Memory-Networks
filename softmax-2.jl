@@ -361,7 +361,7 @@ function trainingAccuracy(data_file, uo, ur, vocabDict, atype)
       line_number = words[1]
       line_number = parse(Int, line_number)
       question = words[2]
-      for i = 3:(length(words) - 2)
+      for i = 3:(length(words) - 3)
         if words[i][end] == '?' || words[i][end] == '.'
           words[i] = words[i][1:end - 1]
         end
@@ -431,7 +431,7 @@ function test(data_file, uo, ur, vocabDict, atype)
       line_number = words[1]
       line_number = parse(Int, line_number)
       question = words[2]
-      for i = 3:(length(words) - 2)
+      for i = 3:(length(words) - 3)
         if words[i][end] == '?' || words[i][end] == '.'
           words[i] = words[i][1:end - 1]
         end
