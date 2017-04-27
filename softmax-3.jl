@@ -76,7 +76,7 @@ function parseLineAddDict(number, line, dict)
       end
     end
   else
-    for i = 2:length(words) - 2
+    for i = 2:length(words) - 3
       str = words[i]
       if str[end] == '?'
         str = str[1:end - 1]

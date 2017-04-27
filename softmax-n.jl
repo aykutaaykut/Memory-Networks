@@ -101,14 +101,16 @@ function parseLineAddDict(number, line, dict)
       end
     end
   else
-    for i = 2:length(words) - 2
+    for i = 2:length(words)
       str = words[i]
       if str[end] == '?'
         str = str[1:end - 1]
       end
-      if !haskey(dict, str)
-        dict[str] = number
-        number = number + 1
+      if !isnumber(str)
+        if !haskey(dict, str)
+          dict[str] = number
+          number = number + 1
+        end
       end
     end
   end
