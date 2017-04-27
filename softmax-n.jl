@@ -31,7 +31,7 @@ function main(args = ARGS)
   end
 
   #Creating the dictionary of words in the data.
-  d_factor = findMaxSupFact([training_data, test_data])
+  d_factor = findMaxSupFact([training_data, test_data]) + 2
   vocabDict = createDict([training_data, test_data])
   vocabDict_length = length(vocabDict)
   info("$vocabDict_length unique words.")
@@ -53,7 +53,7 @@ function findMaxSupFact(datafiles)
   maxSupCount = 0
   for file in datafiles
     f = open(file)
-    while !eof(file)
+    while !eof(f)
       str = readline(f)
       words = split(str)
       if words[end][end] != '.'
@@ -64,9 +64,9 @@ function findMaxSupFact(datafiles)
           end
         end
         count = count - 1 #line number is not counted as a supporting fact.
-      end
-      if count > maxSupCount
-        maxSupCount = count
+        if count > maxSupCount
+          maxSupCount = count
+        end
       end
     end
   end
@@ -163,7 +163,7 @@ end
 
 function O(x_feature_rep, memory, q_list, uo, d_factor, atype)
   x_feature_rep_list = [x_feature_rep]
-  for i = 1:d_factor
+  for i = 1:(d_factor - 2)
     scoreArray = so(x_feature_rep_list, memory, q_list, uo, d_factor, atype)
     scoreArray = scoreArray .- maximum(scoreArray, 1)
     scoreProb = exp(scoreArray) ./ sum(exp(scoreArray), 1)
@@ -251,7 +251,7 @@ end
 
 function uoSoftloss(uo, x_feature_rep_list, memory, q_list, vocabDict, golds, d_factor, atype)
   uoLoss = 0
-  for i = 1:d_factor
+  for i = 1:length(golds)
     uoArray = so(x_feature_rep_list, memory, q_list, uo, d_factor, atype)
     uoArray = uoArray .- maximum(uoArray, 1)
     uoProb = exp(uoArray) ./ sum(exp(uoArray), 1)
@@ -504,7 +504,7 @@ function test(data_file, uo, ur, vocabDict, d_factor, atype)
         push!(correct_ms_index, correct_m_index)
       end
 
-      uoLoss = uoSoftloss(uo, [question_feature_rep], memory, q_list, vocabDict, correct_ms_index, atype)
+      uoLoss = uoSoftloss(uo, [question_feature_rep], memory, q_list, vocabDict, correct_ms_index, d_factor, atype)
 
       urInput = [question_feature_rep]
       urInput = vcat(urInput, correct_ms)
