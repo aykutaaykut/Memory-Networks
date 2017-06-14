@@ -4,7 +4,6 @@ This project is a reimplementation of Memory Networks (Weston, Jason, Chopra, Su
 Memory Neural Networks (MemNNs) have hidden states and weights. This project shows the power of MemNN in the context of Question Answering. MemNNs are able to use related sentences in order to answer questions about a given story. They infer from sentences, chain different sentences, use induction and deduction in order to answer questions. MemNNs have an external memory and this memory is used as a knowledge base, and the output is textual response to the questions. MemNNs are tested with 20 different types of questions which require understanding of the sentences and the questions, and MemNNs are able to answer questions about each type.
 
 MemNNs have 4 components:
-
 I component takes the textual input and converts it into inner feature representation. Bag-of-Words (BoW) approach is used in this component.
 G component takes the inner feature representation of a text and saves it in a memory slot in the external memory.
 O component scores the match between each sentence in the memory and the question. It uses a scoring function and finally the sentence with the highest score is returned.
