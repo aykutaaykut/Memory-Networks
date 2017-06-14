@@ -11,13 +11,13 @@ MemNNs have 4 components:<br/>
 
 In this project, both margin ranking loss and softloss are used in different versions and both versions are publicly available.
 
-MemNN-1-supporting-fact.jl: MemNN implementation using margin ranking loss for questions which require 1 supporting fact to answer.<br/>
-MemNN-2-supporting-facts.jl: MemNN implementation using margin ranking loss for questions which require 2 supporting facts to answer.<br/>
-MemNN-3-supporting-facts.jl: MemNN implementation using margin ranking loss for questions which require 3 supporting facts to answer.<br/>
-softmax-1.jl: MemNN implementation using softloss for questions which require 1 supporting fact to answer.<br/>
-softmax-2.jl: MemNN implementation using softloss for questions which require 2 supporting facts to answer.<br/>
-softmax-3.jl: MemNN implementation using softloss for questions which require 3 supporting facts to answer.<br/>
-softmax-n.jl: MemNN implementation using softloss for questions which require n (variable) supporting facts to answer.<br/>
+* MemNN-1-supporting-fact.jl: MemNN implementation using margin ranking loss for questions which require 1 supporting fact to answer.<br/>
+* MemNN-2-supporting-facts.jl: MemNN implementation using margin ranking loss for questions which require 2 supporting facts to answer.<br/>
+* MemNN-3-supporting-facts.jl: MemNN implementation using margin ranking loss for questions which require 3 supporting facts to answer.<br/>
+* softmax-1.jl: MemNN implementation using softloss for questions which require 1 supporting fact to answer.<br/>
+* softmax-2.jl: MemNN implementation using softloss for questions which require 2 supporting facts to answer.<br/>
+* softmax-3.jl: MemNN implementation using softloss for questions which require 3 supporting facts to answer.<br/>
+* softmax-n.jl: MemNN implementation using softloss for questions which require n (variable) supporting facts to answer.<br/>
 
 The dataset which is used for training and testing in this project is different than the dataset used in Weston's paper. The dataset used in this project is the dataset of Towards AI-Complete Question Answering: A Set of Preprequisite Toy Tasks (Weston, Jason, Bordes, Antoine, Chopra, Sumit, Rush, Alexander M., Merrienboer, Bart van, Joulin Armand, and Mikolov Tomas. 2015. Towards AI-Complete Question Answering: A Set of Preprequisite Toy Tasks. In ICLR 2016. https://arxiv.org/pdf/1502.05698.pdf). This dataset is also publicly available in the dataset folder.
 
