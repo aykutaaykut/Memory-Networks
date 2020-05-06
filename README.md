@@ -23,5 +23,4 @@ The dataset which is used for training and testing in this project is different 
 
 During the fully supervised training, Knet.Adam with learning rate of 0.001 is used as the parameter optimizer for 100 epochs. Since the story length is not constant, there is no minibatching.
 
-My paper about this project can be found at https://drive.google.com/file/d/0B4pJdDuWybS9d2pQaUx2U3pEU1E/view?usp=sharing<br/>
-My presentation of this project can be found at https://drive.google.com/file/d/0B4pJdDuWybS9X0lGSTdMUWlDbFU/view?usp=sharing
+My paper report and presentation of the project can be found in the project folder.
